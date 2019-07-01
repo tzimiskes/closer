@@ -1,0 +1,13 @@
+Package: rcapt
+Title: R Capture And Parallelization Tool
+Version: 0.0.0.9000
+Authors@R:
+    person(given = "Alexander",
+           family = "Rix",
+           role = c("aut", "cre"),
+           email = "alexanderjrix@gmail.com")
+Description: What the package does (one paragraph).
+License: GPl-3
+Encoding: UTF-8
+LazyData: true
+Imports: purrr, rlang

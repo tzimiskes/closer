@@ -1,9 +1,40 @@
-capture <- function(f)
+capture <- function(f, verbose = TRUE)
+{
+    # calculates escapes
+    tmp <- calculate.escapes(f)
+
+    inject.package <- function(x)
+    {
+        if (verbose)
+              print(paste("Injecting library", x))
+        expr(library(!!sym(x)))
+    }
+    preamble <- map(tmp$packages, inject.package)
+
+    # bind escapes into the function's new enclosing environment
+    e <- env()
+    bind <- function(x)
+    {
+        if (verbose)
+          print(paste("Capturing", x))
+        env_bind(e, !!x := env_get(fn_env(f), x, inherit = T))
+    }
+    # bind escaping variables to f
+    walk(tmp$vars, bind)
+    walk(tmp$closures, bind)
+    fn_env(f) <- e
+    # inject code into function body to load libraries before running function
+    fn_body(f) <- expr(`{`(!!!c(preamble, fn_body(f))))
+    return(f)
+}
+
+
+calculate.escapes <- function(f)
 {
     formals   <- fn_fmls_names(f)
     names     <- all.names(fn_body(f))
     informals <- setdiff(names, formals)
-    # calculates escapes
+
     escapes <- map2_lgl(env_has(fn_env(f), informals, F),
                         env_has(fn_env(f), informals, T),
                         ~ .x + .y > 0)
@@ -12,19 +43,18 @@ capture <- function(f)
     vars <- discard(escapes, ~ eval(expr(is_function(!!sym(.x)))))
 
     funs <- keep(escapes, ~ eval(expr(is_function(!!sym(.x)))))
+    # get rid of primitive functions that are defined in base
     closures <- discard(funs, ~ eval(expr(is_primitive(!!sym(.x)))))
-    ns <- map_chr(closures, ~ eval(expr(environmentName(fn_env(!!sym(.x))))))
-    required.packages <- keep(ns, ~ .x != environmentName(global_env()))
-    print(required.packages)
-    preamble <- map(required.packages, ~ expr(library(!!sym(.x))))
 
-    e <- env()
-    bind <- function(x) env_bind(e, !!x := env_get(fn_env(f), x, inherit = T))
-    walk(vars, bind)
-    walk(closures, bind)
-    fn_env(f) <- e
-    fn_body(f) <- expr(`{`(!!!c(preamble, fn_body(f))))
-    return(f)
+    ns <- map_chr(closures, ~ eval(expr(environmentName(fn_env(!!sym(.x))))))
+    user.closure <- map_lgl(ns, ~ .x == environmentName(global_env()))
+
+    closures <- closures[user.closure]
+    #print(closures)
+    packages <- ns[!user.closure]
+
+    #map(closures, ~ calculate.escapes(eval(sym(.x))))
+    return(list(vars = vars, closures = closures, packages = packages))
 }
 
 # slurm.batch <- function(f, data.file, slurm.file)
